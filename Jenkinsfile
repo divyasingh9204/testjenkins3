@@ -1,9 +1,7 @@
 def changeRequestNumber = "null"
 def stageName = "STAGE"
 def ciPipelineName = "CI_Pipeline"
-def currPipelineName = "CD_Pipeline"
 def currStageName = "none"
-def ciBuildNumber = "13"
 pipeline {
     agent any
 
@@ -17,46 +15,64 @@ pipeline {
                 echo '${currStageName} - END'                
             }
         }
-        stage('Close_CI_Change') {
-            steps {
-                script{
-                    currStageName = "Close_CI_Change"
-                    echo "${currStageName} Step - START" 
-                    stageName = "Create_Change"
-                    echo "${currStageName} Step, Get changeRequestNumber using build_number => ${ciBuildNumber}, pipeline_name => ${ciPipelineName}, stage_name => ${stageName}"
-                    changeRequestNumber = snDevOpsGetChangeNumber(changeDetails: """{"build_number":"${ciBuildNumber}","pipeline_name":"${ciPipelineName}","stage_name":"${stageName}"}""")
-                    echo "${currStageName} Step, changeRequestNumber => ${changeRequestNumber} of CI_Pipeline, Proceeding to Close it"
-                    snDevOpsUpdateChangeInfo(changeRequestDetails: """{"state":"3","close_code":"successful", "close_notes":"Closing during ${currStageName} of ${currPipelineName}#${env.BUILD_NUMBER}", "description": "Canceling change as Location changed from ${currStageName} Step by ${env.BUILD_NUMBER}", "comments": "Update of change request through Update API from ${currStageName} Step by ${env.BUILD_NUMBER}", "work_notes": "Update of change request through Update API from ${currStageName} Step by ${env.BUILD_NUMBER}"}""", changeRequestNumber: """${changeRequestNumber}""")
-                    
-                }
-                echo "${currStageName} Step - DONE"
-            }
-        }
         stage('Create_Change') {
             steps {
                 script{
                     currStageName = "Create_Change"
-                }                
-                echo "${currStageName} Step - START, changeRequestNumber - ${changeRequestNumber}, stageName - ${stageName}"
+                }
+                echo "${currStageName} Step - START"
+                echo "changeRequestNumber before snDevOpsChange() - ${changeRequestNumber}, stageName - ${currStageName}"
                 snDevOpsStep()
                 snDevOpsChange()
-                echo "${currStageName} Step - DONE, changeRequestNumber - ${changeRequestNumber}, stageName - ${stageName}"
+                echo "${currStageName} Step - END"
+                echo "changeRequestNumber after snDevOpsChange() but unassigned to snDevOpsGetChangeNumber() - ${changeRequestNumber}, stageName - ${currStageName}"
             }
-        }//End of Get_Change
+        }
+
         stage('Get_Change') {
             steps {
                 script{
-                    currStageName = "Get_Change"
-                    echo "${currStageName} Step (using stageName only), changeRequestNumber - ${changeRequestNumber}, stageName - ${stageName}"
-                    changeRequestNumber = snDevOpsGetChangeNumber(changeDetails: """{"stage_name":"${stageName}"}""")
-                    stageName = "Create_Change"
-                    echo "${currStageName}, Stage Name updated to ${stageName} and GET changeRequestNumber using new StageName"
-                    changeRequestNumber = snDevOpsGetChangeNumber(changeDetails: """{"stage_name":"${stageName}"}""")
-                    snDevOpsUpdateChangeInfo(changeRequestDetails: """{ "short_description": "Test description in Get_Change Step by ${env.BUILD_NUMBER}", "priority": "1", "start_date": "2021-02-05 08:00:00", "end_date": "2022-12-25 08:00:00", "justification": "test justification", "description": "test description", "cab_required": true, "comments": "This update for work notes is from jenkins file", "work_notes": "Update of change request through Update API"}""", changeRequestNumber: """${changeRequestNumber}""")
-                    echo "${currStageName} Step (using stageName only), changeRequestNumber - ${changeRequestNumber}, stageName - ${stageName}"
-                    snDevOpsUpdateChangeInfo(changeRequestDetails: """{"state":"4","reason":"Location changed", "description": "Canceling change as Location changed from ${currStageName} Step by ${env.BUILD_NUMBER}", "comments": "Update of change request through Update API from ${currStageName} Step by ${env.BUILD_NUMBER}", "work_notes": "Update of change request through Update API from ${currStageName} Step by ${env.BUILD_NUMBER}"}""", changeRequestNumber: """${changeRequestNumber}""")
+                    echo "Pipeline Name, Build Number, Stage Name are mandatory input parameters to retrieve the change request number. If these input field parameters are not provided, the change request number for the current Pipeline Name, Build Number, Stage Name will be retrieved. For multi-branch pipelines, you must provide the Branch Name as an input parameter as well. (starting with version 1.37)."
+                    echo "*****"
+                    echo "snDevOpsGetChangeNumber with only stage_name as input parameter"
+                    changeRequestNumber = snDevOpsGetChangeNumber(changeDetails: """{"stage_name":"${currStageName}"}""")
+                    echo "changeRequestNumber after snDevOpsGetChangeNumber() step with stage_name only parameter is - ${changeRequestNumber}"
                 }
             }
-        }//End of Get_Change
+        }
+
+        stage('Update_Change') {
+            steps {
+                script{
+                    currStageName = "Update_Change"
+                    echo "Updating the changeDetails for changeRequestNumber ${changeRequestNumber}"
+                    snDevOpsUpdateChangeInfo(changeRequestDetails: 
+                        """{
+                            "short_description": "Short description updated to Test description in ${currStageName} Step by ${env.BUILD_NUMBER}",
+                            "priority": "1",
+                            "start_date": "2021-02-05 08:00:00",
+                            "end_date": "2022-12-25 08:00:00",
+                            "justification": "test justification",
+                            "description": "test description",
+                            "cab_required": true,
+                            "comments": "This update for comments is from jenkins file",
+                            "work_notes": "This update for work_notes is from jenkins file"
+                        }""", 
+                        changeRequestNumber: """${changeRequestNumber}""")
+                }
+            }
+        }
+        stage('deployTimeout') {
+            steps {
+                snDevOpsChange changeCreationTimeOut: 40, changeRequestDetails: '{ "attributes": { "short_description": "Test description", "priority": "1", "start_date": "2021-02-05 08:00:00", "end_date": "2022-04-05 08:00:00", "justification": "test justification", "description": "test description", "cab_required": true, "comments": "This update for work notes is from jenkins file", "work_notes": "test work notes", "assignment_group": "a715cd759f2002002920bde8132e7018" }, "setCloseCode": false }', changeStepTimeOut: 60, pollingInterval: 5
+                echo 'change with timeout'
+                
+            }
+        }
+        stage('postDeploy') {
+            steps {
+                echo 'post deploy'                
+            }
+        }
     }
 }
